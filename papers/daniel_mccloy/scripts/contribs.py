@@ -1,10 +1,15 @@
+import os
 import subprocess
+
+from copy import deepcopy
 from pathlib import Path
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+
+from github import Auth, Github
 
 # styling
 plt.style.use("dark_background")
@@ -128,3 +133,81 @@ for ix, (fname, events) in enumerate(
             )
         )
     fig.savefig(f"fig-{fname}-history.png", dpi=300, facecolor="none")
+
+
+# # # # # # # # # # # # # # # # # #
+# now, do the committers/mergers  #
+# # # # # # # # # # # # # # # # # #
+data_path = Path("all-mergers.csv").resolve()
+
+if data_path.exists():
+    data = pd.read_csv(data_path, index_col=False, parse_dates=["date"])
+else:
+    rows = list()
+    auth = Auth.Token(os.environ["GITHUB_TOKEN"])
+    g = Github(auth=auth, per_page=100)
+    repo = g.get_repo("mne-tools/mne-python")
+    all_pulls = repo.get_pulls(state="closed")
+    # while loop over paginated results
+    ix = 0
+    done = False
+    while not done:
+        page = all_pulls.get_page(ix)
+        for pr in page:
+            if pr.merged:
+                row = dict(
+                    date=pr.merged_at,
+                    number=pr.number,
+                    merger=pr.merged_by.login or "",
+                )
+                rows.append(row)
+        ix += 1
+        done = not len(page)
+    data = pd.DataFrame(rows)
+    data.sort_values("date", inplace=True)
+    data.to_csv(data_path, index=False)
+
+# remove bots
+data = data.loc[~data["merger"].isin(("github-actions[bot]", "mne-bot"))]
+# cumulative number of mergers
+data["unique mergers"] = [
+    data["merger"].iloc[:ix].nunique() for ix in range(data.shape[0])
+]
+#
+one_year = pd.Timedelta(unit="days", value=365)
+data["mergers in last 12 months"] = [
+    data.loc[
+        (data["date"] > data["date"].iloc[ix] - one_year)
+        & (data["date"] <= data["date"].iloc[ix]),
+        "merger",
+    ].nunique()
+    for ix in range(data.shape[0])
+]
+
+# plot merger data
+_ = [l.remove() for l in ax.collections]
+ax.lines[0].set_data(
+    data["date"].to_numpy(),
+    data["unique mergers"].to_numpy(),
+)
+ax.lines[0].set_label("Cumulative")
+ax.lines[0].set_color("C4")
+ax.set(
+    ylim=(-2, 30),
+    xlabel="Date",
+    ylabel="Maintainers",
+    title="Cumulative unique mergers to MNE-Python",
+)
+fig.savefig("fig-merger-history.png", dpi=300, facecolor="none")
+
+# 12-month rolling count of unique mergers
+newline = mpl.lines.Line2D(
+    xdata=data["date"].to_numpy(),
+    ydata=data["mergers in last 12 months"].to_numpy(),
+    color="C5",
+    label="1 Year Rolling",
+)
+ax.add_line(newline)
+ax.legend()
+# ax.set_title("Unique mergers to MNE-Python (1-year rolling window)")
+fig.savefig("fig-rolling-merger-history.png", dpi=300, facecolor="none")
