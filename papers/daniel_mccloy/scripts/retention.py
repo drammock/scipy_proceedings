@@ -4,6 +4,9 @@ import re
 
 from pathlib import Path
 
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import seaborn as sns
 import yaml
@@ -11,6 +14,11 @@ import yaml
 from github import Auth, Github
 
 sns.set_theme(style="white", context="talk")
+plt.style.use("dark_background")
+mpl.rc("axes.spines", left=False, right=False, top=False, bottom=False)
+mpl.rc("xtick", color="0.8")
+mpl.rc("ytick", color="0.8")
+mpl.rc("axes", labelcolor="0.8", titlecolor="0.8")
 
 handles = (
     "adam2392",
@@ -54,10 +62,11 @@ repos = (
     "mne-qt-browser",
 )
 
-
-auth = Auth.Token(os.environ["GITHUB_TOKEN"])
-g = Github(auth=auth, per_page=100)
-coauthor_regex = re.compile(r"Co-authored-by: (?P<name>[^<>]+) <(?P<email>[^()>]+)>")
+onboarding_events = (
+    dict(date="2021-03-16", y=0.3, text="1st New Developer\nSprint"),
+    dict(date="2022-07-22", y=0.15, text="2nd New Developer\nSprint"),
+    dict(date="2023-11-14", y=0.4, text="Intermediate\nSprint"),
+)
 
 # mapping from GH handles to names
 userfile = Path("users.yaml").resolve()
@@ -66,6 +75,11 @@ if userfile.exists():
     with open(userfile, "r") as fid:
         users = yaml.safe_load(fid)
 else:
+    auth = Auth.Token(os.environ["GITHUB_TOKEN"])
+    g = Github(auth=auth, per_page=100)
+    coauthor_regex = re.compile(
+        r"Co-authored-by: (?P<name>[^<>]+) <(?P<email>[^()>]+)>"
+    )
     users = {handle: g.get_user(handle).name for handle in handles}
     with open(userfile, "w") as fid:
         yaml.dump(users, fid)
@@ -130,19 +144,35 @@ ax = sns.stripplot(
     df,
     x="date",
     y="user",
-    hue="role",
-    size=8,
+    # hue="role",
+    size=6,
     orient="h",
     jitter=False,
-    linewidth=1,
+    linewidth=0,
     edgecolor="#FFFFFF66",
 )
+ax.yaxis.set_ticklabels(np.arange(len(ax.yaxis.get_ticklabels())))
+ax.yaxis.set_tick_params(labelsize=6)
+ylim = ax.get_ylim()
+
+vline_locs = [pd.to_datetime(e["date"]) for e in onboarding_events]
+vlines = ax.vlines(
+    x=vline_locs,
+    ymin=ylim[0] + 0.01 * np.diff(ylim)[0],
+    ymax=ylim[0] + 0.99 * np.diff(ylim)[0],
+    colors="w",
+    linestyle="--",
+    alpha=1,
+    zorder=5,
+)
+
 # TODO add fills at dates of first and second sprints and maintainer onboarding period
 
 fig = ax.figure
-fig.set_size_inches(12, 8)
-fig.subplots_adjust(left=0.2)
-fig.show()
+w, h = np.array((23.67, 9.49)) / 2.54
+fig.set_size_inches(w, h)
+fig.subplots_adjust(left=0.1, right=0.95)
+# fig.show()
 fig.savefig("retention-raw-data.png")
 
 1 / 0
