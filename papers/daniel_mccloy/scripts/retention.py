@@ -149,7 +149,7 @@ ax = sns.stripplot(
     orient="h",
     jitter=False,
     linewidth=0,
-    edgecolor="#FFFFFF66",
+    edgecolor="#00000066",
 )
 ax.yaxis.set_ticklabels(np.arange(len(ax.yaxis.get_ticklabels())))
 ax.yaxis.set_tick_params(labelsize=6)
